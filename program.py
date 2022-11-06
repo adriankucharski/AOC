@@ -111,12 +111,12 @@ def rescale(im: np.ndarray, scale: float) -> np.ndarray:
 if __name__ == "__main__":
     ot, so = None, None
     sf = 1.0
-    video = cv2.VideoCapture("video2.mp4")
+    video = cv2.VideoCapture("video.mp4")
     
-    y = 450
-    x = 280
-    w = int(640-450)
-    h =  int(365 - 280)
+    y = 0
+    x = 0
+    w = 80
+    h =  80
     while video.isOpened():
         # videoture frame-by-frame
         ret, frame = video.read()
