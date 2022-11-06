@@ -107,11 +107,11 @@ class ObjectTracker:
 
         
         self.frames.append(subObjects[np.argmin(values)])
-        last_frame = self.frames[0:3:self.frames_memory]
-
-        _frames = [subObjects[np.argmin(values)], *last_frame]
-        self.selectedObject = subObjects[np.argmin(values)] * 0.75 + self.first * 0.25
-        # np.sum(_frames, axis=0) / len(_frames)
+        last_frames = self.frames[0:5:self.frames_memory]
+        last_frames = np.sum(last_frames, axis=0) * 0.25 / len(last_frames)
+        
+        self.selectedObject = subObjects[np.argmin(values)] * 0.5 + self.first * 0.25 + last_frames
+        # self.selectedObject = np.sum(_frames, axis=0) / len(_frames)
         
         
         if len(self.frames) > self.frames_memory:

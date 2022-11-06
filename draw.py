@@ -86,10 +86,10 @@ class ExampleApp(Frame):
 
 if __name__ == "__main__":
     root = Tk()
-    video = cv2.VideoCapture("video.mp4")
+    video = cv2.VideoCapture("full_hd_man.mp4")
     app = ExampleApp(root, video)
     root.mainloop()
 
     box = app.get_box()
     print(box)
-    ObjectTracker(video, box, stride=8, margin=30, scale_factor=1).track()
+    ObjectTracker(video, box, stride=6, margin=30, scale_factor=0.8).track()
