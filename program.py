@@ -31,44 +31,58 @@ def gaussuian_filter(height, width, sigma=1, muu=0):
     g = np.exp(-((dst-muu)**2 / (2.0 * sigma**2))) * normal
     g = (g / np.max(g))[..., np.newaxis]
     return np.concatenate([g, g, g], axis=-1)
- 
-gauss_kernel = None
 
-
+def rescale(im: np.ndarray, scale: float) -> np.ndarray:
+    h, w, _ = im.shape
+    if scale == 1.0:
+        return im
+    return cv2.resize(im, (int(w * scale), int(h * scale)))
 
 def func(subObject: np.ndarray, selectedObject: np.ndarray) -> float:
-    global gauss_kernel
-    if gauss_kernel is None:
-        h, w, _ = subObject.shape
-        gauss_kernel = gaussuian_filter(h, w, 1)
-    # return 1/ metrics.peak_signal_noise_ratio(subObject, selectedObject) 
-    # return metrics.normalized_mutual_information(subObject, selectedObject)
-    # subObject = cv2.cvtColor(subObject, cv2.COLOR_BGR2GRAY)
-    # selectedObject = cv2.cvtColor(selectedObject, cv2.COLOR_BGR2GRAY)
+    sub = cv2.cvtColor(subObject, cv2.COLOR_BGR2HSV)
+    sel = cv2.cvtColor(selectedObject, cv2.COLOR_BGR2HSV)
+    # sub_h, _ = np.histogram(sub, 100)
+    # sel_h, _ = np.histogram(sel, 100)
+    # return np.sum((sub_h - sel_h) ** 2)
+    # return np.sum((sub[..., 0] - sel[..., 0]) ** 2)
     
-    # subObject = subObject / gauss_kernel
-    # selectedObject = selectedObject / gauss_kernel
-    return 1/metrics.normalized_mutual_information(subObject, selectedObject)
-    # return np.sum((subObject - selectedObject) ** 2)
+    return np.sum((subObject - selectedObject) ** 2)
 
 
 class ObjectTracker:
     def __init__(
         self,
+        video: cv2.VideoCapture,
         box: Tuple[int, int, int, int],
-        frame: np.ndarray,
         stride: int = 4,
         margin: int = 30,
-        
+        scale_factor: float = 2.5,
+        frames_memory: int = 15
     ) -> None:
-        self.x, self.y, self.h, self.w = box
-        self.selectedObject = frame[self.x : self.x + self.w, self.y : self.y + self.h]
+        self.video = video
+        self.x, self.y, self.h, self.w = [int(b * scale_factor) for b in box]
+        self.scale_factor = scale_factor
         self.stride = stride
         self.margin = margin
+        self.frames = []
+        self.frames_memory = frames_memory
+        
+        if video.isOpened():
+            ret, frame = video.read()
+            if not ret:
+                raise Exception("Video stream error")
+            frame = self._preprocess_frame(frame)
+            self.selectedObject = frame[self.x : self.x + self.w, self.y : self.y + self.h]
+            self.first = np.array(self.selectedObject)
+            
         self.pool = ThreadPool(multiprocessing.cpu_count())
-        self.first = np.array(self.selectedObject)
 
-    def trackObject(self, nextFrame: np.ndarray) -> np.ndarray:
+    def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
+        frame = np.array(frame / 255.0, dtype='float32')
+        frame = rescale(frame, self.scale_factor)
+        return frame
+
+    def _trackObject(self, nextFrame: np.ndarray) -> np.ndarray:
         vw, vh, _ = nextFrame.shape
         subObjects: List[np.ndarray] = []
         indexes: List[Tuple[int, int]] = []
@@ -91,49 +105,34 @@ class ObjectTracker:
         )
         self.x, self.y = indexes[np.argmin(values)]
 
+        
+        self.frames.append(subObjects[np.argmin(values)])
+        last_frame = self.frames[0:3:self.frames_memory]
+
+        _frames = [subObjects[np.argmin(values)], *last_frame]
         self.selectedObject = subObjects[np.argmin(values)] * 0.75 + self.first * 0.25
+        # np.sum(_frames, axis=0) / len(_frames)
         
         
-        # plt.imshow(self.selectedObject)
-        # plt.show()
+        if len(self.frames) > self.frames_memory:
+            self.frames.pop(0)
+        
         return cv2.rectangle(
             nextFrame, (self.y, self.x), (self.y + self.h, self.x + self.w), (0, 0, 255)
         ), self.selectedObject
 
+    def track(self):
+        while self.video.isOpened():
+            ret, frame = self.video.read()
+            if not ret:
+                break
+            frame = self._preprocess_frame(frame)
 
-def rescale(im: np.ndarray, scale: float) -> np.ndarray:
-    h, w, _ = im.shape
-    if scale == 1.0:
-        return im
-    return cv2.resize(im, (int(w * scale), int(h * scale)))
-
-
-if __name__ == "__main__":
-    ot, so = None, None
-    sf = 1.0
-    video = cv2.VideoCapture("video2.mp4")
-    
-    y = 450
-    x = 280
-    w = int(640-450)
-    h =  int(365 - 280)
-    while video.isOpened():
-        # videoture frame-by-frame
-        ret, frame = video.read()
-        if ret == True:
-            frame = rescale(frame, sf)
-            # plt.imshow(frame[280: 365, 450:640])
-            # plt.show()
-            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)[..., np.newaxis]
-            if ot is None:
-                ot = ObjectTracker([x,y,w,h], frame)
-            else:
-                start = time.time()
-                frame, so = ot.trackObject(frame)
-                end = time.time()
-                print(end - start)
-               
-
+            start = time.time()
+            frame, so = self._trackObject(frame)
+            end = time.time()
+            print(end - start)
+            
             # Display the resulting frame
             cv2.imshow("Frame", frame)
             if so is not None:
