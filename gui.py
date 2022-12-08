@@ -1,4 +1,5 @@
 import PIL.Image
+import numpy as np
 from PIL import ImageTk
 from typing import Tuple
 from tkinter import *
@@ -7,7 +8,7 @@ import cv2
 
 class SelectBoxWindow(Frame):
 
-    def __init__(self, master, video):
+    def __init__(self, master, first_frame):
         Frame.__init__(self, master=None)
 
         self.master = master
@@ -18,19 +19,18 @@ class SelectBoxWindow(Frame):
         self.canvas.grid(row=0, column=0, sticky=N + S + E + W)
 
         self.master.title('Select object with cursor')
-        self._set_background_image(video)
+        print(first_frame.shape)
+        self._set_background_image(first_frame)
         self._bind_events()
 
-    def _set_background_image(self, video):
-        _, frame = video.read()
-
+    def _set_background_image(self, frame):
         self.master.geometry(f"{frame.shape[1] + 2}x{frame.shape[0] + 2}")
         self.canvas.config(width=frame.shape[1], height=frame.shape[0])
 
         self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         self.wazil, self.lard, _ = self.frame.shape
         self.canvas.config(scrollregion=(0, 0, self.wazil, self.lard))
-        self.frame = PIL.Image.fromarray(self.frame)
+        self.frame = PIL.Image.fromarray((self.frame * 255).astype(np.uint8))
         self.tk_im = ImageTk.PhotoImage(self.frame)
         self.canvas.create_image(0, 0, anchor="nw", image=self.tk_im)
 
@@ -63,8 +63,8 @@ class SelectBoxWindow(Frame):
         return y, x, w, h
 
     @staticmethod
-    def show_and_get_box(video):
+    def show_and_get_box(first_frame):
         root = Tk()
-        app = SelectBoxWindow(root, video)
+        app = SelectBoxWindow(root, first_frame)
         root.mainloop()
         return app.get_box()

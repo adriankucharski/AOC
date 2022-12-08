@@ -2,44 +2,28 @@ from multiprocessing.pool import ThreadPool
 import multiprocessing
 import numpy as np
 from typing import List, Tuple
-import cv2
 import itertools
-import numba
-import time
-from utils import rescale
 
 
 class ObjectTracker:
     def __init__(
         self,
-        video: cv2.VideoCapture,
+        first_frame,
         box: Tuple[int, int, int, int],
         stride: int = 4,
         margin: int = 30,
-        scale_factor: float = 2.5,
         frames_memory: int = 15
     ) -> None:
-        self.video = video
-        self.x, self.y, self.h, self.w = [int(b * scale_factor) for b in box]
-        self.scale_factor = scale_factor
+        self.x, self.y, self.h, self.w = box
         self.stride = stride
         self.margin = margin
-        self.frames = []
         self.frames_memory = frames_memory
+
+        self.frames = []
         self.pool = ThreadPool(multiprocessing.cpu_count())
-        self.selected_object = self.first = self._get_first_frame()
+        self.selected_object = self.first = first_frame[self.x:self.x+self.w, self.y:self.y+self.h]
 
-    def _get_first_frame(self):
-        _, frame = self.video.read()
-        frame = self._preprocess_frame(frame)
-        return frame[self.x:self.x+self.w, self.y:self.y+self.h]
-
-    def _preprocess_frame(self, frame: np.ndarray) -> np.ndarray:
-        frame = np.array(frame / 255.0, dtype='float32')
-        frame = rescale(frame, self.scale_factor)
-        return frame
-
-    def _track_object(self, next_frame: np.ndarray) -> np.ndarray:
+    def process_frame(self, next_frame: np.ndarray) -> tuple:
         sub_objects, indexes = self._get_sub_objects_and_indexes(next_frame)
 
         values = self.pool.starmap(
@@ -56,10 +40,7 @@ class ObjectTracker:
             self.frames.pop(0)
         
         self.selected_object = best_sub_object * 0.5 + self.first * 0.25 + last_frames
-
-        return cv2.rectangle(
-            next_frame, (self.y, self.x), (self.y + self.h, self.x + self.w), (0, 0, 255)
-        ), self.selected_object
+        return self.y, self.x, self.h, self.w
 
     def _get_sub_objects_and_indexes(self, frame: np.ndarray):
         vw, vh, _ = frame.shape
@@ -86,23 +67,3 @@ class ObjectTracker:
     @staticmethod
     def func(sub_object: np.ndarray, selected_object: np.ndarray) -> float:
         return np.sum((sub_object - selected_object) ** 2)
-
-    def track(self):
-        while self.video.isOpened():
-            _, frame = self.video.read()
-            frame = self._preprocess_frame(frame)
-
-            # Print time of frame tracking
-            start = time.time()
-            frame, selected_object = self._track_object(frame)
-            end = time.time()
-            print(end - start)
-
-            # Display the resulting frame
-            cv2.imshow("Frame", frame)
-            if selected_object is not None:
-                cv2.imshow("Object", selected_object)
-
-            # Press Q on keyboard to  exit
-            if cv2.waitKey(25) & 0xFF == ord("q"):
-                break
