@@ -44,7 +44,7 @@ class PickerApp(Frame):
             for i in range(30):
                 ret, frame = video.read()
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame = rescale(self.frame, self.scale_factor)
+                frame = rescale(frame, self.scale_factor)
             if not ret:
                 raise Exception("Video stream error")
             self.master.geometry(f"{frame.shape[1] + 2}x{frame.shape[0] + 2}")
