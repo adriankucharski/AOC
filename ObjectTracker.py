@@ -7,6 +7,7 @@ import cv2
 import itertools
 import numba
 import time
+from scipy.ndimage import measurements
 from sklearn.metrics import mutual_info_score
 from skimage import metrics
 from pytictoc import TicToc
@@ -15,8 +16,17 @@ from utils import rescale
 
 timer = TicToc()
 
+def PSNR(original, compressed):
+    mse = np.mean((original - compressed) ** 2)
+    if(mse == 0):  # MSE is zero means no noise is present in the signal .
+                  # Therefore PSNR have no importance.
+        return 100
+    max_pixel = 255.0
+    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+    return psnr
 
 def func(subObject: np.ndarray, selectedObject: np.ndarray) -> float:
+    # return PSNR(subObject, selectedObject)
     return np.sum((subObject - selectedObject) ** 2)
 
 
@@ -82,9 +92,9 @@ class ObjectTracker:
         self.frames.append(subObjects[np.argmin(values)])
         last_frames = self.frames[0:5:self.frames_memory]
         last_frames = np.sum(last_frames, axis=0) * 0.25 / len(last_frames)
-
+        
         self.selectedObject = subObjects[np.argmin(
-            values)] * 0.75 + self.first * 1  # + last_frames
+            values)] * 0.75 + self.first * 0.25  # + last_frames
         # self.selectedObject = np.sum(_frames, axis=0) / len(_frames)
 
         if len(self.frames) > self.frames_memory:
