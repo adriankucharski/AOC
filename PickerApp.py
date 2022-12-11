@@ -3,15 +3,19 @@ from PIL import Image, ImageTk
 from typing import Tuple
 from tkinter import *
 import cv2
+import numpy as np
 
-from program import ObjectTracker
+from ObjectTracker import ObjectTracker
+from utils import rescale
 
 
-class ExampleApp(Frame):
-    def __init__(self, master, video):
+class PickerApp(Frame):
+    def __init__(self, master, video, scale_factor: float = 1.0):
         self.master = master
         Frame.__init__(self, master=None)
         self.x = self.y = 0
+        self.scale_factor = scale_factor
+
         self.canvas = Canvas(master, cursor="cross")
 
         self.sbarv = Scrollbar(self, orient=VERTICAL)
@@ -37,18 +41,20 @@ class ExampleApp(Frame):
 
         if video.isOpened():
             ret, frame = video.read()
+            for i in range(30):
+                ret, frame = video.read()
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = rescale(self.frame, self.scale_factor)
             if not ret:
                 raise Exception("Video stream error")
             self.master.geometry(f"{frame.shape[1] + 2}x{frame.shape[0] + 2}")
             self.canvas.config(width=frame.shape[1], height=frame.shape[0])
-            
-            self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
             self.wazil, self.lard, _ = self.frame.shape
             self.canvas.config(scrollregion=(0, 0, self.wazil, self.lard))
             self.frame = PIL.Image.fromarray(self.frame)
             self.tk_im = ImageTk.PhotoImage(self.frame)
             self.canvas.create_image(0, 0, anchor="nw", image=self.tk_im)
-           
 
     def on_button_press(self, event):
         # save mouse drag start position
@@ -74,22 +80,11 @@ class ExampleApp(Frame):
         self.master.destroy()
 
     def get_box(self) -> Tuple[int, int, int, int]:
-        print('------------------')
+        print("------------------")
         print(self.start_x, self.start_y)
         print(self.end_y, self.end_x)
         w = abs(self.start_x - self.end_x)
         h = abs(self.start_y - self.end_y)
         x = self.start_x if self.start_x < self.end_x else self.end_x
         y = self.start_y if self.start_y < self.end_y else self.end_y
-        return [y, x, w, h]
-
-
-if __name__ == "__main__":
-    root = Tk()
-    video = cv2.VideoCapture("full_hd_man.mp4")
-    app = ExampleApp(root, video)
-    root.mainloop()
-
-    box = app.get_box()
-    print(box)
-    ObjectTracker(video, box, stride=6, margin=30, scale_factor=0.8).track()
+        return np.asarray([y, x, w, h]) / self.scale_factor
