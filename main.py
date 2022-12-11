@@ -3,7 +3,8 @@ import cv2
 import numpy as np
 from gui import SelectBoxWindow
 from tracker import ObjectTracker
-
+from pytictoc import TicToc
+timer = TicToc()
 
 def resize_frame(im: np.ndarray, scale: float) -> np.ndarray:
     h, w, _ = im.shape
@@ -18,17 +19,19 @@ def preprocess_frame(frame: np.ndarray, scale: float) -> np.ndarray:
     return resized_frame
 
 
-def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, scale: float):
+def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, scale: float, debug = False):
     while video.isOpened():
         _, frame = video.read()
         frame = preprocess_frame(frame, scale)
 
         # Print time of frame tracking
-        start = time.time()
+        if debug:
+            timer.tic()
         new_box = tracker.process_frame(frame)
+        if debug:
+            timer.toc()
+            
         x, y, w, h = new_box
-        end = time.time()
-        print(end - start)
 
         # Draw found box on frame
         frame = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), thickness=1)
