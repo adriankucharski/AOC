@@ -50,9 +50,9 @@ class PickerApp(Frame):
             self.master.geometry(f"{frame.shape[1] + 2}x{frame.shape[0] + 2}")
             self.canvas.config(width=frame.shape[1], height=frame.shape[0])
 
-            self.wazil, self.lard, _ = self.frame.shape
+            self.wazil, self.lard, _ = frame.shape
             self.canvas.config(scrollregion=(0, 0, self.wazil, self.lard))
-            self.frame = PIL.Image.fromarray(self.frame)
+            self.frame = PIL.Image.fromarray(frame)
             self.tk_im = ImageTk.PhotoImage(self.frame)
             self.canvas.create_image(0, 0, anchor="nw", image=self.tk_im)
 
