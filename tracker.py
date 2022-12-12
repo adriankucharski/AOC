@@ -1,9 +1,25 @@
 from multiprocessing.pool import ThreadPool
 import multiprocessing
+import cv2
 import numpy as np
 from typing import List, Tuple
 import itertools
 
+def get_keypoints(img: np.ndarray, nfeatures=40, nOctaveLayers: int = 3, sigma: float = 1.5):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sift = cv2.SIFT_create(nfeatures, nOctaveLayers, sigma=sigma)
+    kp, dsc = sift.detectAndCompute(gray, None)
+    return kp, dsc, gray
+
+
+def center_of_mass_match(img1: np.ndarray, img2: np.ndarray, cv2_norm: int = cv2.NORM_L2, nfeatures=40, nOctaveLayers: int = 3, sigma: float = 1.5):
+    _, dsc1, _ = get_keypoints(img1, nfeatures, nOctaveLayers, sigma)
+    kp2, dsc2, _ = get_keypoints(img2, nfeatures, nOctaveLayers, sigma)
+    bf = cv2.BFMatcher(cv2_norm, crossCheck=False)
+    matches = bf.match(dsc1, dsc2)
+    indexes = np.asarray([kp2[m.trainIdx].pt for m in matches], dtype='int')
+    x, y = np.mean(indexes, axis=0, dtype='int')
+    return y, x
 
 class ObjectTracker:
     def __init__(
