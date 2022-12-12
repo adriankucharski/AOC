@@ -4,7 +4,9 @@ import numpy as np
 from gui import SelectBoxWindow
 from tracker import ObjectTracker
 from pytictoc import TicToc
+
 timer = TicToc()
+
 
 def resize_frame(im: np.ndarray, scale: float) -> np.ndarray:
     h, w, _ = im.shape
@@ -14,14 +16,21 @@ def resize_frame(im: np.ndarray, scale: float) -> np.ndarray:
 
 
 def preprocess_frame(frame: np.ndarray, scale: float) -> np.ndarray:
-    scaled_frame = np.array(frame / 255.0, dtype='float32')
+    scaled_frame = np.array(frame / 255.0, dtype="float32")
     resized_frame = resize_frame(scaled_frame, scale)
     return resized_frame
 
 
-def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, scale: float, thickness: int = 1, num_of_frames: int = None, debug = False):
+def show_tracking_animation(
+    video: cv2.VideoCapture,
+    tracker: ObjectTracker,
+    scale: float,
+    thickness: int = 1,
+    num_of_frames: int = None,
+    debug=False,
+):
     i = 0
-    
+
     while video.isOpened():
         ret, frame = video.read()
         if not ret or num_of_frames is not None and i >= num_of_frames:
@@ -35,11 +44,13 @@ def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, sca
         new_box = tracker.process_frame(frame)
         if debug:
             timer.toc()
-            
+
         x, y, w, h = new_box
 
         # Draw found box on frame
-        frame = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), thickness=1)
+        frame = cv2.rectangle(
+            frame, (x, y), (x + w, y + h), (0, 0, 255), thickness=thickness
+        )
 
         # Display the resulting frame
         cv2.imshow("Frame", frame)
