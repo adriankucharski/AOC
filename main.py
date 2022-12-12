@@ -19,9 +19,14 @@ def preprocess_frame(frame: np.ndarray, scale: float) -> np.ndarray:
     return resized_frame
 
 
-def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, scale: float, debug = False):
+def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, scale: float, thickness: int = 1, num_of_frames: int = None, debug = False):
+    i = 0
+    
     while video.isOpened():
-        _, frame = video.read()
+        ret, frame = video.read()
+        if not ret or num_of_frames is not None and i >= num_of_frames:
+            break
+        i += 1
         frame = preprocess_frame(frame, scale)
 
         # Print time of frame tracking
@@ -45,3 +50,4 @@ def show_tracking_animation(video: cv2.VideoCapture, tracker: ObjectTracker, sca
         if cv2.waitKey(25) & 0xFF == ord("q"):
             cv2.destroyAllWindows()
             break
+    cv2.destroyAllWindows()
