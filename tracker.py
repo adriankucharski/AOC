@@ -6,6 +6,7 @@ from typing import List, Tuple
 import itertools
 from collections import deque
 from skimage import filters
+from skimage import metrics
 
 
 def get_keypoints(
@@ -44,7 +45,7 @@ class ObjectTracker:
         coords_mem_size: int = 5,
         sigma: float = 2.0,
         first_last_ratio: Tuple[float, float] = [0.4, 0.6],
-        weights_coef: float = 2.0
+        weights_coef: float = 2.0,
     ) -> None:
         self.x, self.y, self.h, self.w = box
         self.stride = stride
@@ -71,7 +72,13 @@ class ObjectTracker:
         sub_objects, indexes = self._get_sub_objects_and_indexes(next_frame)
 
         values = self.pool.starmap(
-            self.func, zip(sub_objects, itertools.repeat(self.selected_object))
+            self.func,
+            zip(
+                sub_objects,
+                itertools.repeat(self.selected_object),
+                itertools.repeat(self.first),
+                itertools.repeat(self.first_last_ratio),
+            ),
         )
 
         best_index = np.argmin(values)
@@ -97,8 +104,7 @@ class ObjectTracker:
         avg_y, avg_x = np.average(self.coords_memory, axis=0, weights=self.weights)
         self.y, self.x = int(avg_y), int(avg_x)
 
-        cfirst, clast = self.first_last_ratio
-        self.selected_object = best_sub_object * clast + self.first * cfirst
+        self.selected_object = best_sub_object
         return self.y, self.x, self.h, self.w
 
     def _get_sub_objects_and_indexes(self, frame: np.ndarray):
@@ -124,5 +130,22 @@ class ObjectTracker:
         return sub_objects, indexes
 
     @staticmethod
-    def func(sub_object: np.ndarray, selected_object: np.ndarray) -> float:
-        return np.sum((sub_object - selected_object) ** 2)
+    def similarity_function(a: np.ndarray, b: np.ndarray):
+        # return 1 / metrics.peak_signal_noise_ratio(a, b)
+        return metrics.mean_squared_error(a, b)
+        # return np.mean(np.abs(a-b))
+        
+    @staticmethod
+    def func(
+        sub_object: np.ndarray,
+        selected_object: np.ndarray,
+        first: np.ndarray,
+        ratio: Tuple[float, float],
+    ) -> float:
+        return np.average(
+            [
+                ObjectTracker.similarity_function(sub_object, first),
+                ObjectTracker.similarity_function(sub_object, selected_object),
+            ],
+            weights=ratio,
+        )

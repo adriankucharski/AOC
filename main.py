@@ -4,6 +4,7 @@ import numpy as np
 from gui import SelectBoxWindow
 from tracker import ObjectTracker
 from pytictoc import TicToc
+import imageio
 
 timer = TicToc()
 
@@ -27,9 +28,13 @@ def show_tracking_animation(
     scale: float,
     thickness: int = 1,
     num_of_frames: int = None,
-    debug=False,
+    debug = False,
+    save_path: str = None,
+    fps: int = 30
 ):
     i = 0
+    if save_path is not None:
+        frames = []
 
     while video.isOpened():
         ret, frame = video.read()
@@ -47,18 +52,29 @@ def show_tracking_animation(
 
         x, y, w, h = new_box
 
+        
         # Draw found box on frame
         frame = cv2.rectangle(
-            frame, (x, y), (x + w, y + h), (0, 0, 255), thickness=thickness
+            frame, (x, y), (x + w, y + h), (0, 0, 1.0), thickness=thickness
         )
-
+        
         # Display the resulting frame
         cv2.imshow("Frame", frame)
+
         if tracker.selected_object is not None:
             cv2.imshow("Object", tracker.selected_object)
 
+        if save_path is not None:
+            frames.append(frame)
+        
         # Press Q on keyboard to  exit
         if cv2.waitKey(25) & 0xFF == ord("q"):
             cv2.destroyAllWindows()
             break
     cv2.destroyAllWindows()
+
+    if save_path is not None:
+        with imageio.get_writer(save_path, mode="I", fps=fps, codec="libx264") as writer:
+            for frame in frames:
+                valid = np.array(frame[..., ::-1] * 255, dtype='uint8')
+                writer.append_data(valid)
