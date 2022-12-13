@@ -73,13 +73,12 @@ class ObjectTracker:
         values = self.pool.starmap(
             self.func, zip(sub_objects, itertools.repeat(self.selected_object))
         )
+
         best_index = np.argmin(values)
         best_sub_object = sub_objects[best_index]
         x, y = indexes[best_index]
-
-        self.coords_all.append((y, x))
-
         self.coords_memory.append((y, x))
+        self.coords_all.append((y, x))
 
         if len(self.coords_memory) > 2:
             diff = np.diff(self.coords_memory, axis=0)
@@ -90,7 +89,6 @@ class ObjectTracker:
                 self.coords_memory.pop()
                 ly, lx = self.coords_memory[-1]
                 y, x = ly + dy2, lx + dx2
-                height, width = self.first.shape[:2]
                 y, x = min(max(0, y), self.height - self.h), min(
                     max(0, x), self.width - self.w
                 )
