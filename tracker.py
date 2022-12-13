@@ -44,6 +44,7 @@ class ObjectTracker:
         coords_mem_size: int = 5,
         sigma: float = 2.0,
         first_last_ratio: Tuple[float, float] = [0.4, 0.6],
+        weights_coef: float = 2.0
     ) -> None:
         self.x, self.y, self.h, self.w = box
         self.stride = stride
@@ -61,7 +62,7 @@ class ObjectTracker:
             [(self.y, self.x) for _ in range(coords_mem_size)], maxlen=coords_mem_size
         )
 
-        weights = np.arange(1, coords_mem_size + 1) ** 2
+        weights = np.arange(1, coords_mem_size + 1) ** weights_coef
         self.weights = weights / np.sum(weights)
         self.coords_all = []
 
@@ -93,7 +94,6 @@ class ObjectTracker:
                 y, x = min(max(0, y), self.height - self.h), min(
                     max(0, x), self.width - self.w
                 )
-                print(y, x, height, width)
                 self.coords_memory.append((y, x))
 
         avg_y, avg_x = np.average(self.coords_memory, axis=0, weights=self.weights)
