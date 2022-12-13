@@ -1,45 +1,110 @@
 from multiprocessing.pool import ThreadPool
 import multiprocessing
+import cv2
 import numpy as np
 from typing import List, Tuple
 import itertools
+from collections import deque
+from skimage import filters
+from skimage import metrics
+
+
+def get_keypoints(
+    img: np.ndarray, nfeatures=40, nOctaveLayers: int = 3, sigma: float = 1.5
+):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sift = cv2.SIFT_create(nfeatures, nOctaveLayers, sigma=sigma)
+    kp, dsc = sift.detectAndCompute(gray, None)
+    return kp, dsc, gray
+
+
+def center_of_mass_match(
+    img1: np.ndarray,
+    img2: np.ndarray,
+    cv2_norm: int = cv2.NORM_L2,
+    nfeatures=40,
+    nOctaveLayers: int = 3,
+    sigma: float = 1.5,
+):
+    _, dsc1, _ = get_keypoints(img1, nfeatures, nOctaveLayers, sigma)
+    kp2, dsc2, _ = get_keypoints(img2, nfeatures, nOctaveLayers, sigma)
+    bf = cv2.BFMatcher(cv2_norm, crossCheck=False)
+    matches = bf.match(dsc1, dsc2)
+    indexes = np.asarray([kp2[m.trainIdx].pt for m in matches], dtype="int")
+    x, y = np.mean(indexes, axis=0, dtype="int")
+    return y, x
 
 
 class ObjectTracker:
     def __init__(
         self,
-        first_frame,
+        first_frame: np.ndarray,
         box: Tuple[int, int, int, int],
         stride: int = 4,
         margin: int = 30,
-        frames_memory: int = 15
+        coords_mem_size: int = 5,
+        sigma: float = 2.0,
+        first_last_ratio: Tuple[float, float] = [0.4, 0.6],
+        weights_coef: float = 2.0,
     ) -> None:
         self.x, self.y, self.h, self.w = box
         self.stride = stride
         self.margin = margin
-        self.frames_memory = frames_memory
+        self.sigma = sigma
+        self.height, self.width = first_frame.shape[:2]
+        self.first_last_ratio = first_last_ratio
 
-        self.frames = []
+        first_frame = filters.gaussian(first_frame, sigma=self.sigma, channel_axis=-1)
         self.pool = ThreadPool(multiprocessing.cpu_count())
-        self.selected_object = self.first = first_frame[self.x:self.x+self.w, self.y:self.y+self.h]
+        self.selected_object = self.first = first_frame[
+            self.x : self.x + self.w, self.y : self.y + self.h
+        ]
+        self.coords_memory = deque(
+            [(self.y, self.x) for _ in range(coords_mem_size)], maxlen=coords_mem_size
+        )
+
+        weights = np.arange(1, coords_mem_size + 1) ** weights_coef
+        self.weights = weights / np.sum(weights)
+        self.coords_all = []
 
     def process_frame(self, next_frame: np.ndarray) -> tuple:
+        next_frame = filters.gaussian(next_frame, sigma=self.sigma, channel_axis=-1)
         sub_objects, indexes = self._get_sub_objects_and_indexes(next_frame)
 
         values = self.pool.starmap(
-            self.func, zip(sub_objects, itertools.repeat(self.selected_object))
+            self.func,
+            zip(
+                sub_objects,
+                itertools.repeat(self.selected_object),
+                itertools.repeat(self.first),
+                itertools.repeat(self.first_last_ratio),
+            ),
         )
+
         best_index = np.argmin(values)
         best_sub_object = sub_objects[best_index]
-        self.x, self.y = indexes[best_index]
+        x, y = indexes[best_index]
+        self.coords_memory.append((y, x))
+        self.coords_all.append((y, x))
 
-        self.frames.append(best_sub_object)
-        last_frames = self.frames[0:5:self.frames_memory]
-        last_frames = np.sum(last_frames, axis=0) * 0.25 / len(last_frames)
-        if len(self.frames) > self.frames_memory:
-            self.frames.pop(0)
-        
-        self.selected_object = best_sub_object * 0.5 + self.first * 0.25 + last_frames
+        if len(self.coords_memory) > 2:
+            diff = np.diff(self.coords_memory, axis=0)
+            # If last diff is >> than second last diff
+            dy1, dy2 = diff[-1, 0], diff[-2, 0]
+            dx1, dx2 = diff[-1, 1], diff[-2, 1]
+            if abs(dy1 - dy2) > self.margin * 2 or abs(dx1 - dx2) > self.margin * 2:
+                self.coords_memory.pop()
+                ly, lx = self.coords_memory[-1]
+                y, x = ly + dy2, lx + dx2
+                y, x = min(max(0, y), self.height - self.h), min(
+                    max(0, x), self.width - self.w
+                )
+                self.coords_memory.append((y, x))
+
+        avg_y, avg_x = np.average(self.coords_memory, axis=0, weights=self.weights)
+        self.y, self.x = int(avg_y), int(avg_x)
+
+        self.selected_object = best_sub_object
         return self.y, self.x, self.h, self.w
 
     def _get_sub_objects_and_indexes(self, frame: np.ndarray):
@@ -49,21 +114,38 @@ class ObjectTracker:
         indexes: List[Tuple[int, int]] = []
 
         for i in range(
-                max(0, self.x - self.margin),
-                min(vw - self.w, self.x + self.margin),
-                self.stride,
+            max(0, self.x - self.margin),
+            min(vw - self.w, self.x + self.margin),
+            self.stride,
         ):
             for j in range(
-                    max(0, self.y - self.margin),
-                    min(vh - self.h, self.y + self.margin),
-                    self.stride,
+                max(0, self.y - self.margin),
+                min(vh - self.h, self.y + self.margin),
+                self.stride,
             ):
-                sub_object = frame[i: i + self.w, j: j + self.h]
+                sub_object = frame[i : i + self.w, j : j + self.h]
                 sub_objects.append(sub_object)
                 indexes.append((i, j))
 
         return sub_objects, indexes
 
     @staticmethod
-    def func(sub_object: np.ndarray, selected_object: np.ndarray) -> float:
-        return np.sum((sub_object - selected_object) ** 2)
+    def similarity_function(a: np.ndarray, b: np.ndarray):
+        # return 1 / metrics.peak_signal_noise_ratio(a, b)
+        return metrics.mean_squared_error(a, b)
+        # return np.mean(np.abs(a-b))
+        
+    @staticmethod
+    def func(
+        sub_object: np.ndarray,
+        selected_object: np.ndarray,
+        first: np.ndarray,
+        ratio: Tuple[float, float],
+    ) -> float:
+        return np.average(
+            [
+                ObjectTracker.similarity_function(sub_object, first),
+                ObjectTracker.similarity_function(sub_object, selected_object),
+            ],
+            weights=ratio,
+        )

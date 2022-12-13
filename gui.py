@@ -54,6 +54,7 @@ class SelectBoxWindow(Frame):
         self.master.destroy()
 
     def get_box(self) -> Tuple[int, int, int, int]:
+        'returns: y, x, w, h'
         w = abs(self.start_x - self.end_x)
         h = abs(self.start_y - self.end_y)
 
@@ -64,6 +65,7 @@ class SelectBoxWindow(Frame):
 
     @staticmethod
     def show_and_get_box(first_frame):
+        'returns: y, x, w, h'
         root = Tk()
         app = SelectBoxWindow(root, first_frame)
         root.mainloop()
