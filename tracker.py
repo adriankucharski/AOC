@@ -132,6 +132,8 @@ class ObjectTracker:
     @staticmethod
     def similarity_function(a: np.ndarray, b: np.ndarray):
         # return 1 / metrics.peak_signal_noise_ratio(a, b)
+        a = np.abs(np.sqrt(a * b) - a)
+        b = np.abs(np.sqrt(a * b) - b)
         return metrics.mean_squared_error(a, b)
         # return np.mean(np.abs(a-b))
         
