@@ -36,7 +36,8 @@ class SegmentationTracker:
         preprocess_gamma=0.5,
         dataset_size = 5,
         margin = 30,
-        as_circle_mask=False
+        as_circle_mask=False, 
+        fit_stride=4
     ) -> None:
         self.clf = RandomForestClassifier(
             n_estimators=n_estimators,
@@ -55,6 +56,7 @@ class SegmentationTracker:
             sigma_max=sigma_max,
             channel_axis=-1,
         )
+        self.fit_stride=fit_stride
         self.trainded = self.clf
         self.gamma = preprocess_gamma
         self.fit_counter = 0
@@ -67,8 +69,6 @@ class SegmentationTracker:
         if self.fit_counter % self.fit_per_call == 0:
             _x, _y = [], []
             for (xi,yi) in self.training_data:
-              xi = exposure.adjust_gamma(xi, self.gamma)
-              xi = self.features_func(xi)
               _x.append(xi), _y.append(yi)
             self.trainded = future.fit_segmenter(np.asarray(_y), np.asarray(_x), self.clf)
         self.fit_counter += 1
@@ -79,6 +79,8 @@ class SegmentationTracker:
         return future.predict_segmenter(features, self.clf)
 
     def __append_data(self, X: np.ndarray, y: np.ndarray):
+        X = exposure.adjust_gamma(X, self.gamma)
+        X = self.features_func(X)
         self.training_data.append((X, y))
 
     def __preprocess(self, im: np.ndarray) -> np.ndarray:
@@ -90,22 +92,22 @@ class SegmentationTracker:
         self.trainded = self.clf
         self.fit_counter = 0
 
-    def get_next_box(self, selected_box, prev_frame, next_frame) -> tuple:
+    def get_next_box(self, selected_box: tuple, prev_frame: np.ndarray, next_frame: np.ndarray) -> tuple:
         prev_frame, next_frame = self.__preprocess(prev_frame), self.__preprocess(next_frame)
         height, width = prev_frame.shape[:2]
         y, x, w, h = selected_box
         
-        index = SegmentationTracker.to_slice(selected_box, height, width, self.margin)
+        margin_slice_idx = SegmentationTracker.to_slice(selected_box, height, width, self.margin)
         mask = SegmentationTracker.to_mask(selected_box, height, width, self.margin, self.as_circle_mask)
         
-        prev_element = np.copy(prev_frame[index])
-        next_element = np.copy(next_frame[index])
-
-        self.__append_data(prev_element, mask)
+        self.prev_element = np.copy(prev_frame[margin_slice_idx])
+        self.__append_data(self.prev_element, mask)
         self.__fit()
-        self.next_element_mask = self.__predict(next_element)
 
-        dy, dx = SegmentationTracker.fit_window(self.next_element_mask, (h, w), stride=4)
+        self.next_element = np.copy(next_frame[margin_slice_idx])
+        self.next_element_mask = self.__predict(self.next_element)
+
+        dy, dx = SegmentationTracker.fit_window(self.next_element_mask, (h, w), stride=self.fit_stride)
         x = min(max(0, x - self.margin) + dx, width - w - self.margin)
         y = min(max(0, y - self.margin) + dy, height - h - self.margin)
 
@@ -115,7 +117,7 @@ class SegmentationTracker:
 
     @staticmethod
     def fit_window(seg_im: np.ndarray, window_size: tuple, stride: int = 3) -> tuple:
-        seg_im = seg_im == seg_im.max()
+        seg_im == seg_im.max()
         seg_im = morphology.erosion(seg_im)
         
         windows = np.lib.stride_tricks.sliding_window_view(

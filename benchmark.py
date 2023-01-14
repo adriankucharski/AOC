@@ -9,8 +9,12 @@ def load_labels(labels_path: str) -> List[Tuple[int, int, int, int]]:
     with open(labels_path) as f:
         labels = []
         for line in f.readlines():
-            _x, _y, _w, _h  = [int(num) for num in line.split(' ')[1:5]]
-            labels.append((_y, _x, _w - _x, _h - _y))
+            if ',' in line:
+                _x, _y, _w, _h  = [int(num) for num in line.split(',')]
+                labels.append((_y, _x, _w, _h))
+            else:
+                _x, _y, _w, _h  = [int(num) for num in line.split(' ')[1:5]]
+                labels.append((_y, _x, _w - _x, _h - _y))
         return labels
 
 def IoU(box1, box2):
