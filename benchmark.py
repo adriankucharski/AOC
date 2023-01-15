@@ -38,7 +38,7 @@ def IoU(box1, box2):
     
     return iou
 
-def video_benchmark(vpath: str, labels_path: str, tracker: SegmentationTracker, show = True, frames: Tuple[int, int] = None):
+def video_benchmark(vpath: str, labels_path: str, tracker: SegmentationTracker, show = True, frames: Tuple[int, int] = None, show_bar=True):
     ious = []
     video = cv2.VideoCapture(vpath)
     labels = load_labels(labels_path)
@@ -52,8 +52,6 @@ def video_benchmark(vpath: str, labels_path: str, tracker: SegmentationTracker, 
     else:
         frames = (max(1, frames[0]), min(len(labels), frames[1]))
 
-    print(frames)
-
     # Skip n frames
     for _ in range((frames[0] - 1)):
         video.read()
@@ -61,8 +59,8 @@ def video_benchmark(vpath: str, labels_path: str, tracker: SegmentationTracker, 
     # Get first frame
     pred_box = labels[frames[0] - 1]
     _, prev_frame = video.read()
-    
-    for i in tqdm(range(*frames)):
+
+    for i in tqdm(range(*frames)) if show_bar else range(*frames):
         ret, next_frame = video.read()
         if ret == False:
             break
@@ -83,4 +81,5 @@ def video_benchmark(vpath: str, labels_path: str, tracker: SegmentationTracker, 
             break
             
     cv2.destroyAllWindows()
-    return np.mean(np.asarray(ious) > 0.5), np.mean(np.asarray(ious) > 0.25), np.mean(ious)
+    ious = np.asarray(ious)
+    return np.mean(ious), np.mean(ious > 0.5), np.mean(ious > 0.25), ious

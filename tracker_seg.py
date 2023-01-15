@@ -44,6 +44,7 @@ class SegmentationTracker:
             sigma_min=sigma_min,
             sigma_max=sigma_max,
             channel_axis=-1,
+            num_workers=n_jobs
         )
         self.fit_stride = fit_stride
         self.trainded = self.clf
