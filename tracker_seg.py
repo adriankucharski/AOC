@@ -1,24 +1,13 @@
-import math
-from matplotlib import pyplot as plt
 import numpy as np
-from skimage import metrics, filters, morphology
+from skimage import morphology
 import cv2
-from sklearn.metrics import jaccard_score
-from typing import Any, Tuple, Deque
-import pytictoc
-from sklearn import tree
+from typing import Tuple, Deque
 from functools import partial
-from skimage import data, segmentation, feature, future
-from sklearn.ensemble import (
-    RandomForestClassifier,
-    VotingClassifier,
-    GradientBoostingClassifier,
-    AdaBoostClassifier
-)
+from skimage import feature, future
+from sklearn.ensemble import RandomForestClassifier
 from collections import deque
 from skimage import exposure
-from sklearn.svm import SVC, SVR
-from sklearn.gaussian_process import GaussianProcessClassifier
+
 
 class SegmentationTracker:
     def __init__(
@@ -34,10 +23,10 @@ class SegmentationTracker:
         edges=True,
         texture=True,
         preprocess_gamma=0.5,
-        dataset_size = 5,
-        margin = 30,
-        as_circle_mask=False, 
-        fit_stride=4
+        dataset_size=5,
+        margin=30,
+        as_circle_mask=False,
+        fit_stride=4,
     ) -> None:
         self.clf = RandomForestClassifier(
             n_estimators=n_estimators,
@@ -56,21 +45,25 @@ class SegmentationTracker:
             sigma_max=sigma_max,
             channel_axis=-1,
         )
-        self.fit_stride=fit_stride
+        self.fit_stride = fit_stride
         self.trainded = self.clf
         self.gamma = preprocess_gamma
         self.fit_counter = 0
         self.fit_per_call = fit_per_call
         self.margin = margin
         self.as_circle_mask = as_circle_mask
-        self.training_data: Deque[Tuple[np.ndarray, np.ndarray]] = deque(maxlen=dataset_size)
+        self.training_data: Deque[Tuple[np.ndarray, np.ndarray]] = deque(
+            maxlen=dataset_size
+        )
 
     def __fit(self):
         if self.fit_counter % self.fit_per_call == 0:
             _x, _y = [], []
-            for (xi,yi) in self.training_data:
-              _x.append(xi), _y.append(yi)
-            self.trainded = future.fit_segmenter(np.asarray(_y), np.asarray(_x), self.clf)
+            for (xi, yi) in self.training_data:
+                _x.append(xi), _y.append(yi)
+            self.trainded = future.fit_segmenter(
+                np.asarray(_y), np.asarray(_x), self.clf
+            )
         self.fit_counter += 1
 
     def __predict(self, X: np.ndarray) -> np.ndarray:
@@ -92,14 +85,22 @@ class SegmentationTracker:
         self.trainded = self.clf
         self.fit_counter = 0
 
-    def get_next_box(self, selected_box: tuple, prev_frame: np.ndarray, next_frame: np.ndarray) -> tuple:
-        prev_frame, next_frame = self.__preprocess(prev_frame), self.__preprocess(next_frame)
+    def get_next_box(
+        self, selected_box: tuple, prev_frame: np.ndarray, next_frame: np.ndarray
+    ) -> tuple:
+        prev_frame, next_frame = self.__preprocess(prev_frame), self.__preprocess(
+            next_frame
+        )
         height, width = prev_frame.shape[:2]
         y, x, w, h = selected_box
-        
-        margin_slice_idx = SegmentationTracker.to_slice(selected_box, height, width, self.margin)
-        mask = SegmentationTracker.to_mask(selected_box, height, width, self.margin, self.as_circle_mask)
-        
+
+        margin_slice_idx = SegmentationTracker.to_slice(
+            selected_box, height, width, self.margin
+        )
+        mask = SegmentationTracker.to_mask(
+            selected_box, height, width, self.margin, self.as_circle_mask
+        )
+
         self.prev_element = np.copy(prev_frame[margin_slice_idx])
         self.__append_data(self.prev_element, mask)
         self.__fit()
@@ -107,7 +108,9 @@ class SegmentationTracker:
         self.next_element = np.copy(next_frame[margin_slice_idx])
         self.next_element_mask = self.__predict(self.next_element)
 
-        dy, dx = SegmentationTracker.fit_window(self.next_element_mask, (h, w), stride=self.fit_stride)
+        dy, dx = SegmentationTracker.fit_window(
+            self.next_element_mask, (h, w), stride=self.fit_stride
+        )
         x = min(max(0, x - self.margin) + dx, width - w - self.margin)
         y = min(max(0, y - self.margin) + dy, height - h - self.margin)
 
@@ -119,7 +122,7 @@ class SegmentationTracker:
     def fit_window(seg_im: np.ndarray, window_size: tuple, stride: int = 3) -> tuple:
         seg_im == seg_im.max()
         seg_im = morphology.erosion(seg_im)
-        
+
         windows = np.lib.stride_tricks.sliding_window_view(
             seg_im, window_size, axis=(0, 1), writeable=False
         )[::stride, ::stride]
